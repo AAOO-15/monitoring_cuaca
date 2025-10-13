@@ -98,11 +98,11 @@ onMounted(async () => {
         suhuData.value.shift()
         suhuLabels.value.shift()
       }
-      if (suhuChart) {
+      if (suhuChart && suhuChart.data.datasets[0]) {
         suhuChart.data.labels = suhuLabels.value.slice()
         suhuChart.data.datasets[0].data = suhuData.value.slice()
-        suhuChart.update()
-      }
+          suhuChart.update()
+}
     }
 
     if (topic === 'esp32/kelembapan') {
@@ -113,13 +113,12 @@ onMounted(async () => {
         humData.value.shift()
         humLabels.value.shift()
       }
-      if (humChart) {
+      if (humChart && humChart.data.datasets[0]) {
         humChart.data.labels = humLabels.value.slice()
         humChart.data.datasets[0].data = humData.value.slice()
         humChart.update()
       }
     }
-
     if (topic === 'esp32/curah_hujan') {
       curahHujan.value = val
       rainData.value.push(num)
@@ -128,7 +127,7 @@ onMounted(async () => {
         rainData.value.shift()
         rainLabels.value.shift()
       }
-      if (rainChart) {
+      if (rainChart && rainChart.data.datasets[0]) {
         rainChart.data.labels = rainLabels.value.slice()
         rainChart.data.datasets[0].data = rainData.value.slice()
         rainChart.update()
@@ -143,7 +142,7 @@ onMounted(async () => {
         anginData.value.shift()
         anginLabels.value.shift()
       }
-      if (anginChart) {
+      if (anginChart && anginChart.data.datasets[0]) {
         anginChart.data.labels = anginLabels.value.slice()
         anginChart.data.datasets[0].data = anginData.value.slice()
         anginChart.update()
