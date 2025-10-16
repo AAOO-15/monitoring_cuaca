@@ -1,33 +1,80 @@
 <template>
-  <div>
-    <h2>🌤️ Dashboard Cuaca ESP32</h2>
+  <div class="dashboard">
+    <div class="container">
+      <header class="top">
+        <h2>🌤️ Dashboard Cuaca ESP32</h2>
+        <div class="current-weather" :title="'Cuaca saat ini'">{{ cuaca }}</div>
+      </header>
 
-    <div class="data-box">Suhu: {{ suhu }} °C</div>
-    <div class="data-box">Kelembapan: {{ kelembapan }} %</div>
-    <div class="data-box">Curah Hujan: {{ curahHujan }} mm</div>
-    <div class="data-box">Kecepatan Angin: {{ kecepatanAngin }} m/s</div>
-    <div class="data-box">Cuaca Hari Ini: {{ cuaca }}</div>
+      <section class="stats" aria-label="Ringkasan Data">
+        <div class="stat-card">
+          <div class="stat-label">Suhu</div>
+          <div class="stat-value">{{ suhu }}<span class="unit">°C</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Kelembapan</div>
+          <div class="stat-value">{{ kelembapan }}<span class="unit">%</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Curah Hujan</div>
+          <div class="stat-value">{{ curahHujan }}<span class="unit">mm</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Angin</div>
+          <div class="stat-value">{{ kecepatanAngin }}<span class="unit">m/s</span></div>
+        </div>
+      </section>
 
-    <div class="chart-grid">
-      <div class="chart-box">
-        <h3>🌧️ Curah Hujan</h3>
-        <canvas ref="rainCanvas"></canvas>
-      </div>
-      <div class="chart-box">
-        <h3>🌡️ Suhu</h3>
-        <canvas ref="suhuCanvas"></canvas>
-      </div>
-      <div class="chart-box">
-        <h3>💨 Kecepatan Angin</h3>
-        <canvas ref="anginCanvas"></canvas>
-      </div>
-      <div class="chart-box">
-        <h3>💧 Kelembapan</h3>
-        <canvas ref="humCanvas"></canvas>
+      <section class="charts" aria-label="Grafik Data">
+        <div class="chart-card">
+          <div class="chart-title">Curah Hujan</div>
+          <canvas ref="rainCanvas"></canvas>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-title">Suhu</div>
+          <canvas ref="suhuCanvas"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Kecepatan Angin</div>
+          <canvas ref="anginCanvas"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Kelembapan</div>
+          <canvas ref="humCanvas"></canvas>
+        </div>
+
+        <div class="table-box">
+          <div class="chart-title">Data Curah Hujan</div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Waktu</th>
+                  <th>Suhu (°C)</th>
+                  <th>Kelembapan (%)</th>
+                  <th>Kecepatan Angin (m/s)</th>
+                  <th>Curah Hujan (mm)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(label, index) in rainLabels" :key="index">
+                  <td>{{ label }}</td>
+                  <td>{{ suhuData[index] ?? '_' }}</td>
+                  <td>{{ humData[index] ?? '_' }}</td>
+                  <td>{{ anginData[index] ?? '_' }}</td>
+                  <td>{{ rainData[index] ?? '_' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <div class="actions">
+        <button class="btn" @click="downloadCSV" title="Unduh CSV">📥 Download CSV</button>
       </div>
     </div>
-
-    <button @click="downloadCSV">📥 Download Data Curah Hujan</button>
   </div>
 </template>
 
@@ -68,10 +115,13 @@ let humChart: Chart | null = null
 onMounted(async () => {
   await nextTick()
 
-  const client = mqtt.connect('wss://751cee3a0dcb4364bbb1e4dbe4a87ca5.s1.eu.hivemq.cloud:8884/mqtt', {
-    username: 'langgamdewa',
-    password: 'Rizkypratama512'
-  })
+  const client = mqtt.connect(
+    'wss://751cee3a0dcb4364bbb1e4dbe4a87ca5.s1.eu.hivemq.cloud:8884/mqtt',
+    {
+      username: 'langgamdewa',
+      password: 'Rizkypratama512',
+    },
+  )
 
   client.on('connect', () => {
     console.log('✅ Connected to HiveMQ Cloud')
@@ -101,8 +151,8 @@ onMounted(async () => {
       if (suhuChart && suhuChart.data.datasets[0]) {
         suhuChart.data.labels = suhuLabels.value.slice()
         suhuChart.data.datasets[0].data = suhuData.value.slice()
-          suhuChart.update()
-}
+        suhuChart.update()
+      }
     }
 
     if (topic === 'esp32/kelembapan') {
@@ -160,14 +210,16 @@ onMounted(async () => {
       type: 'line',
       data: {
         labels: [],
-        datasets: [{
-          label: 'Curah Hujan (mm)',
-          data: [],
-          borderColor: 'blue',
-          fill: false
-        }]
+        datasets: [
+          {
+            label: 'Curah Hujan (mm)',
+            data: [],
+            borderColor: 'blue',
+            fill: false,
+          },
+        ],
       },
-      options: { responsive: true }
+      options: { responsive: true },
     })
   }
 
@@ -176,14 +228,16 @@ onMounted(async () => {
       type: 'line',
       data: {
         labels: [],
-        datasets: [{
-          label: 'Suhu (°C)',
-          data: [],
-          borderColor: 'red',
-          fill: false
-        }]
+        datasets: [
+          {
+            label: 'Suhu (°C)',
+            data: [],
+            borderColor: 'red',
+            fill: false,
+          },
+        ],
       },
-      options: { responsive: true }
+      options: { responsive: true },
     })
   }
 
@@ -192,14 +246,16 @@ onMounted(async () => {
       type: 'line',
       data: {
         labels: [],
-        datasets: [{
-          label: 'Kelembapan (%)',
-          data: [],
-          borderColor: 'purple',
-          fill: false
-        }]
+        datasets: [
+          {
+            label: 'Kelembapan (%)',
+            data: [],
+            borderColor: 'purple',
+            fill: false,
+          },
+        ],
       },
-      options: { responsive: true }
+      options: { responsive: true },
     })
   }
 
@@ -208,72 +264,197 @@ onMounted(async () => {
       type: 'line',
       data: {
         labels: [],
-        datasets: [{
-          label: 'Kecepatan Angin (m/s)',
-          data: [],
-          borderColor: 'green',
-          fill: false
-        }]
+        datasets: [
+          {
+            label: 'Kecepatan Angin (m/s)',
+            data: [],
+            borderColor: 'green',
+            fill: false,
+          },
+        ],
       },
-      options: { responsive: true }
+      options: { responsive: true },
     })
   }
 })
 
 function downloadCSV() {
-  let csv = "Waktu,Curah Hujan (mm)\n"
-  for (let i = 0; i < rainData.value.length; i++) {
-    csv += `${rainLabels.value[i]},${rainData.value[i]}\n`
+  let csv = 'Waktu,Suhu (°C),Kelembapan (%),Kecepatan Angin (m/s),Curah Hujan (mm)\n'
+  for (let i = 0; i < suhuLabels.value.length; i++) {
+    const waktu = suhuLabels.value[i] ?? '-'
+    const suhuVal = suhuData.value[i] ?? '-'
+    const humVal = humData.value[i] ?? '-'
+    const anginVal = anginData.value[i] ?? '-'
+    const hujanVal = rainData.value[i] ?? '-'
+    csv += `${waktu},${suhuVal},${humVal},${anginVal},${hujanVal}\n`
   }
+
   const blob = new Blob([csv], { type: 'text/csv' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = 'data_curah_hujan.csv'
+  a.download = 'data_monitoring_cuaca.csv'
   a.click()
   URL.revokeObjectURL(url)
 }
 </script>
 
 <style scoped>
-h2 {
-  font-size: 24px;
-  margin-bottom: 10px;
+/* Layout and background */
+.dashboard {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #eaf3ff 0%, #d7e7ff 60%, #c6dcff 100%);
+  padding: 24px 16px;
+  box-sizing: border-box;
 }
-.data-box {
-  margin-bottom: 8px;
-  font-size: 16px;
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
 }
-.chart-grid {
+.top {
   display: flex;
-  flex-wrap: wrap;
-  gap: 20px;
-  margin-top: 20px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
 }
-.chart-box {
-  flex: 1 1 300px;
-  border: 1px solid #ddd;
-  padding: 10px;
+h2 {
+  margin: 0;
+  font-size: 22px;
+  color: #0a2e5c;
+}
+.current-weather {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(10, 46, 92, 0.15);
+  padding: 6px 10px;
   border-radius: 8px;
-  background: #f9f9f9;
+  color: #0a2e5c;
+  font-weight: 600;
 }
-.chart-box h3 {
-  margin-bottom: 10px;
-  font-size: 18px;
+
+/* Stats */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.stat-card {
+  background: #ffffff;
+  border: 1px solid rgba(10, 46, 92, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 6px 20px rgba(10, 46, 92, 0.08);
+}
+.stat-label {
+  font-size: 12px;
+  color: #4a6a90;
+}
+.stat-value {
+  margin-top: 4px;
+  font-size: 24px;
+  font-weight: 700;
+  color: #0a2e5c;
+}
+.unit {
+  margin-left: 4px;
+  font-size: 14px;
+  color: #4a6a90;
+  font-weight: 600;
+}
+
+/* Charts */
+.charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+.chart-card,
+.table-box {
+  background: #ffffff;
+  border: 1px solid rgba(10, 46, 92, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 6px 20px rgba(10, 46, 92, 0.08);
+}
+.chart-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0a2e5c;
+  margin-bottom: 8px;
 }
 canvas {
   max-width: 100%;
 }
-button {
-  margin-top: 20px;
-  padding: 8px 16px;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
+
+/* Table */
+
+.container .table-box {
+  width: 54vw;
+  max-width: 55vw;
 }
-button:hover {
-  background-color: #0056b3;
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(10, 46, 92, 0.1);
+}
+table {
+  width: 800px;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+.table-box {
+  margin-top: 30px;
+  padding: 10px;
+  border-radius: 8px;
+  background: #fff;
+  overflow-x: auto;
+  width: 100%;
+  box-sizing: border-box;
+  display: inline-block;
+}
+
+th,td {
+  border: 1px solid #ccc;
+  padding: 8px 12px;
+  text-align: center;
+  white-space: nowrap;
+}
+td {
+  white-space:normal;
+  word-break: break-word;
+}
+thead {
+  background: #f3f8ff;
+  color: #0a2e5c;
+}
+
+/* Actions */
+.actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+.btn {
+  padding: 8px 14px;
+  background: #0a66ff;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(10, 102, 255, 0.25);
+}
+.btn:hover {
+  background: #0856d6;
+}
+
+@media (max-width: 600px) {
+  .actions {
+    justify-content: stretch;
+  }
+  .btn {
+    width: 100%;
+  }
 }
 </style>
