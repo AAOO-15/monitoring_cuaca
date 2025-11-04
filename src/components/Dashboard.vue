@@ -23,8 +23,11 @@
           <div class="stat-label">Angin</div>
           <div class="stat-value">{{ kecepatanAngin }}<span class="unit">m/s</span></div>
         </div>
+        <div class="stat-card">
+          <div class="stat-label">Intensitas Cahaya</div>
+          <div class="stat-value">{{ intensitasCahaya }}<span class="unit">LUX</span></div>
+        </div>
       </section>
-
       <section class="charts" aria-label="Grafik Data">
         <div class="chart-card">
           <div class="chart-title">Curah Hujan</div>
@@ -43,6 +46,10 @@
           <div class="chart-title">Kelembapan</div>
           <canvas ref="humCanvas"></canvas>
         </div>
+        <div class="chart-card">
+          <div class="chart-title">Intensitas Cahaya</div>
+          <canvas ref="luxCanvas"></canvas>
+        </div>
 
         <div class="table-box">
           <div class="chart-title">Data Curah Hujan</div>
@@ -55,6 +62,7 @@
                   <th>Kelembapan (%)</th>
                   <th>Kecepatan Angin (m/s)</th>
                   <th>Curah Hujan (mm)</th>
+                  <th>Intensitas Cahaya (LUX)</th>
                 </tr>
               </thead>
               <tbody>
@@ -64,6 +72,7 @@
                   <td>{{ humData[index] ?? '_' }}</td>
                   <td>{{ anginData[index] ?? '_' }}</td>
                   <td>{{ rainData[index] ?? '_' }}</td>
+                  <td>{{ luxData[index] ?? '_' }}</td>
                 </tr>
               </tbody>
             </table>
@@ -88,13 +97,16 @@ const suhu = ref('--')
 const kelembapan = ref('--')
 const curahHujan = ref('--')
 const kecepatanAngin = ref('--')
+const kondisiCuaca = ref('--')
 const cuaca = ref('--')
+const intensitasCahaya = ref('--')
 
 // Canvas refs
 const rainCanvas = ref<HTMLCanvasElement | null>(null)
 const suhuCanvas = ref<HTMLCanvasElement | null>(null)
 const anginCanvas = ref<HTMLCanvasElement | null>(null)
 const humCanvas = ref<HTMLCanvasElement | null>(null)
+const luxCanvas = ref<HTMLCanvasElement | null>(null)
 
 // Historis data
 const rainData = ref<number[]>([])
@@ -105,12 +117,15 @@ const anginData = ref<number[]>([])
 const anginLabels = ref<string[]>([])
 const humData = ref<number[]>([])
 const humLabels = ref<string[]>([])
+const luxData = ref<number[]>([])
+const luxLabels = ref<string[]>([])
 
 // Chart instances
 let rainChart: Chart | null = null
 let suhuChart: Chart | null = null
 let anginChart: Chart | null = null
 let humChart: Chart | null = null
+let luxChart: Chart | null = null
 
 onMounted(async () => {
   await nextTick()
@@ -202,6 +217,21 @@ onMounted(async () => {
     if (topic === 'esp32/cuaca') {
       cuaca.value = val
     }
+
+    if (topic === 'esp32/lux') {
+      intensitasCahaya.value = val
+      luxData.value.push(num)
+      luxLabels.value.push(now)
+      if (luxData.value.length > 288) {
+      luxData.value.shift()
+      luxLabels.value.shift()
+      }
+      if (luxChart && luxChart.data.datasets[0]) {
+      luxChart.data.labels = luxLabels.value.slice()
+      luxChart.data.datasets[0].data = luxData.value.slice()
+      luxChart.update()
+      }
+    }
   })
 
   // Chart setup
@@ -276,17 +306,37 @@ onMounted(async () => {
       options: { responsive: true },
     })
   }
+
+  if (luxCanvas.value) {
+    luxChart = new Chart(luxCanvas.value, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'Intensitas Cahaya (LUX)',
+            data: [],
+            borderColor: 'orange',
+            fill: false,
+          },
+        ],
+      },
+      options: { responsive: true },
+    })
+  }
 })
 
 function downloadCSV() {
-  let csv = 'Waktu,Suhu (°C),Kelembapan (%),Kecepatan Angin (m/s),Curah Hujan (mm)\n'
-  for (let i = 0; i < suhuLabels.value.length; i++) {
-    const waktu = suhuLabels.value[i] ?? '-'
+  let csv =
+    'Waktu,Suhu (°C),Kelembapan (%),Kecepatan Angin (m/s),Curah Hujan (mm),Intensitas Cahaya (LUX)\n'
+  for (let i = 0; i < rainLabels.value.length; i++) {
+    const waktu = rainLabels.value[i] ?? '-'
     const suhuVal = suhuData.value[i] ?? '-'
     const humVal = humData.value[i] ?? '-'
     const anginVal = anginData.value[i] ?? '-'
     const hujanVal = rainData.value[i] ?? '-'
-    csv += `${waktu},${suhuVal},${humVal},${anginVal},${hujanVal}\n`
+    const luxVal = luxData.value[i] ?? '-'
+    csv += `${waktu},${suhuVal},${humVal},${anginVal},${hujanVal},${luxVal}\n`
   }
 
   const blob = new Blob([csv], { type: 'text/csv' })
@@ -415,14 +465,15 @@ table {
   display: inline-block;
 }
 
-th,td {
+th,
+td {
   border: 1px solid #ccc;
   padding: 8px 12px;
   text-align: center;
   white-space: nowrap;
 }
 td {
-  white-space:normal;
+  white-space: normal;
   word-break: break-word;
 }
 thead {
