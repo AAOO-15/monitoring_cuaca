@@ -3,6 +3,14 @@
     <div class="container">
       <header class="top">
         <h2>🌤️ Dashboard Cuaca ESP32</h2>
+        <div
+          class="status-indicator"
+          :class="{ online: mqttConnected }"
+          :title="mqttConnected ? 'MQTT Connected' : 'MQTT Disconnected'"
+        >
+          <span class="dot"></span>
+          {{ mqttConnected ? 'Online' : 'Offline' }}
+        </div>
         <div class="current-weather" :title="'Cuaca saat ini'">{{ cuaca }}</div>
       </header>
 
@@ -57,22 +65,22 @@
             <table>
               <thead>
                 <tr>
-                  <th>Waktu</th>
-                  <th>Suhu (°C)</th>
-                  <th>Kelembapan (%)</th>
-                  <th>Kecepatan Angin (m/s)</th>
-                  <th>Curah Hujan (mm)</th>
-                  <th>Intensitas Cahaya (LUX)</th>
+                  <th class="col-waktu">Waktu</th>
+                  <th class="col-suhu">Suhu (°C)</th>
+                  <th class="col-hum">Kelembapan (%)</th>
+                  <th class="col-angin">Kecepatan Angin (m/s)</th>
+                  <th class="col-rain">Curah Hujan (mm)</th>
+                  <th class="col-lux">Intensitas Cahaya (LUX)</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="(label, index) in rainLabels" :key="index">
-                  <td>{{ label }}</td>
-                  <td>{{ suhuData[index] ?? '_' }}</td>
-                  <td>{{ humData[index] ?? '_' }}</td>
-                  <td>{{ anginData[index] ?? '_' }}</td>
-                  <td>{{ rainData[index] ?? '_' }}</td>
-                  <td>{{ luxData[index] ?? '_' }}</td>
+                  <td class="col-waktu">{{ label }}</td>
+                  <td class="col-suhu">{{ suhuData[index] ?? '_' }}</td>
+                  <td class="col-hum">{{ humData[index] ?? '_' }}</td>
+                  <td class="col-angin">{{ anginData[index] ?? '_' }}</td>
+                  <td class="col-rain">{{ rainData[index] ?? '_' }}</td>
+                  <td class="col-lux">{{ luxData[index] ?? '_' }}</td>
                 </tr>
               </tbody>
             </table>
@@ -100,6 +108,11 @@ const kecepatanAngin = ref('--')
 const kondisiCuaca = ref('--')
 const cuaca = ref('--')
 const intensitasCahaya = ref('--')
+
+// Debug/connection status
+const mqttConnected = ref(false)
+const lastMessageTime = ref('--')
+const messageCount = ref(0)
 
 // Canvas refs
 const rainCanvas = ref<HTMLCanvasElement | null>(null)
@@ -131,29 +144,114 @@ onMounted(async () => {
   await nextTick()
 
   const client = mqtt.connect(
-    'wss://751cee3a0dcb4364bbb1e4dbe4a87ca5.s1.eu.hivemq.cloud:8884/mqtt',
+    'wss://751cee3a0dcb4364bbb1e4dbe4a87ca5.s1.eu.hivemq.cloud:8883/mqtt',
     {
       username: 'langgamdewa',
       password: 'Rizkypratama512',
+      reconnectPeriod: 5000,
+      connectTimeout: 30000,
+      keepalive: 60,
+      clean: true,
+      clientId: 'web_dashboard_' + Math.random().toString(16).substr(2, 8),
     },
   )
 
+  client.on('reconnect', () => {
+    console.log('🔄 Reconnecting to MQTT...')
+  })
+
+  client.on('offline', () => {
+    mqttConnected.value = false
+    console.log('📴 MQTT went offline')
+  })
+
   client.on('connect', () => {
-    console.log('✅ Connected to HiveMQ Cloud')
-    client.subscribe('esp32/#')
+    mqttConnected.value = true
+    console.log('✅ Connected to HiveMQ Cloud at', new Date().toLocaleTimeString())
+    console.log('🌐 Environment:', import.meta.env.MODE)
+    console.log('🔗 Broker:', 'wss://751cee3a0dcb4364bbb1e4dbe4a87ca5.s1.eu.hivemq.cloud:8883')
+
+    // Subscribe ke semua topic secara individual (backup jika wildcard gagal)
+    const topics = [
+      'esp32/suhu',
+      'esp32/kelembapan',
+      'esp32/curah_hujan',
+      'esp32/kecepatan_angin',
+      'esp32/cuaca',
+      'esp32/lux',
+      'esp32/#',
+    ]
+
+    let subscribeCount = 0
+    topics.forEach((topic) => {
+      client.subscribe(topic, (err) => {
+        if (err) {
+          console.error(`❌ Subscribe error for ${topic}:`, err)
+        } else {
+          subscribeCount++
+          console.log(`✅ Subscribed to ${topic} (${subscribeCount}/${topics.length})`)
+        }
+      })
+    })
+
+    // Debug info setelah subscribe
+    setTimeout(() => {
+      console.log('\n📊 === DEBUG INFO ===')
+      console.log('✅ MQTT Connected:', mqttConnected.value)
+      console.log('📝 Subscribed to:', subscribeCount, 'topics')
+      console.log('⏳ Waiting for data from ESP32...')
+      console.log('\n💡 If no data appears after 30 seconds, check:')
+      console.log('   1. ESP32 is powered on')
+      console.log('   2. ESP32 Serial Monitor shows "terhubung"')
+      console.log('   3. ESP32 shows "=== Data Cuaca ==="')
+      console.log(
+        '   4. ESP32 using same broker: 751cee3a0dcb4364bbb1e4dbe4a87ca5.s1.eu.hivemq.cloud',
+      )
+      console.log('===================\n')
+    }, 2000)
+  })
+
+  client.on('disconnect', () => {
+    mqttConnected.value = false
+    console.log('❌ Disconnected from MQTT')
   })
 
   client.on('error', (err) => {
+    mqttConnected.value = false
     console.error('❌ MQTT Error:', err)
   })
 
   client.on('message', (topic, message) => {
+    // FIRST LOG - Pastikan ini muncul
+    console.log('🎉 === MESSAGE RECEIVED ===')
+
+    if (!topic) {
+      console.warn('⚠️ Received message without topic')
+      return
+    }
+
     const val = message.toString()
     const now = new Date().toLocaleTimeString()
-    console.log('📩', topic, val)
+
+    // Update status
+    lastMessageTime.value = now
+    messageCount.value++
+
+    // LOG SEMUA pesan yang masuk - DETAILED
+    console.log('📩 MQTT Message Details:')
+    console.log('   Topic:', topic)
+    console.log('   Value:', val)
+    console.log('   Time:', now)
+    console.log('   Total Messages:', messageCount.value)
+    console.log('========================\n')
 
     const num = parseFloat(val)
-    if (isNaN(num) && topic !== 'esp32/cuaca') return
+
+    // Validasi lebih relaxed - log tapi tetap proses
+    if (isNaN(num) && topic !== 'esp32/cuaca') {
+      console.warn(`⚠️ Invalid number from ${topic}:`, val)
+      return
+    }
 
     if (topic === 'esp32/suhu') {
       suhu.value = val
@@ -216,21 +314,39 @@ onMounted(async () => {
 
     if (topic === 'esp32/cuaca') {
       cuaca.value = val
+      console.log('✅ Cuaca updated:', val)
     }
 
-    if (topic === 'esp32/lux') {
+    if (topic === 'esp32/lux' || topic === 'esp32/intensitas_cahaya') {
       intensitasCahaya.value = val
       luxData.value.push(num)
       luxLabels.value.push(now)
       if (luxData.value.length > 288) {
-      luxData.value.shift()
-      luxLabels.value.shift()
+        luxData.value.shift()
+        luxLabels.value.shift()
       }
       if (luxChart && luxChart.data.datasets[0]) {
-      luxChart.data.labels = luxLabels.value.slice()
-      luxChart.data.datasets[0].data = luxData.value.slice()
-      luxChart.update()
+        luxChart.data.labels = luxLabels.value.slice()
+        luxChart.data.datasets[0].data = luxData.value.slice()
+        luxChart.update()
       }
+      console.log('✅ LUX updated:', val)
+    }
+
+    // Catch-all: log topic yang tidak dikenali
+    const knownTopics = [
+      'esp32/suhu',
+      'esp32/kelembapan',
+      'esp32/curah_hujan',
+      'esp32/kecepatan_angin',
+      'esp32/cuaca',
+      'esp32/lux',
+      'esp32/intensitas_cahaya',
+    ]
+
+    if (!knownTopics.includes(topic)) {
+      console.warn('⚠️ Unknown topic:', topic, '| value:', val)
+      console.warn('💡 Did you mean one of these?', knownTopics)
     }
   })
 
@@ -367,11 +483,86 @@ function downloadCSV() {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 h2 {
   margin: 0;
   font-size: 22px;
   color: #0a2e5c;
+}
+.status-panel {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+}
+.status-item {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(220, 53, 69, 0.3);
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: #dc3545;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-item.connected {
+  border-color: rgba(40, 167, 69, 0.3);
+  color: #28a745;
+}
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #dc3545;
+  animation: pulse 2s infinite;
+}
+.status-item.connected .status-dot {
+  background: #28a745;
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+.status-indicator {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(220, 53, 69, 0.3);
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: #dc3545;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.status-indicator.online {
+  border-color: rgba(40, 167, 69, 0.3);
+  color: #28a745;
+}
+.status-indicator .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #dc3545;
+  animation: pulse 2s infinite;
+}
+.status-indicator.online .dot {
+  background: #28a745;
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 .current-weather {
   background: rgba(255, 255, 255, 0.8);
@@ -419,7 +610,20 @@ h2 {
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 16px;
 }
-.chart-card,
+.chart-card {
+  background: #ffffff;
+  border: 1px solid rgba(10, 46, 92, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 6px 20px rgba(10, 46, 92, 0.08);
+  height: 150px;
+  display: flex;
+  flex-direction: column;
+}
+.chart-card canvas {
+  flex: 1;
+  min-height: 0;
+}
 .table-box {
   background: #ffffff;
   border: 1px solid rgba(10, 46, 92, 0.08);
@@ -445,24 +649,29 @@ canvas {
 }
 .table-wrap {
   width: 100%;
+  max-height: 350px;
   overflow-x: auto;
-  border-radius: 10px;
-  box-shadow: 0 4px 12px rgba(10, 46, 92, 0.1);
+  overflow-y: auto;
+  border-radius: 8px;
+  flex: 1;
 }
 table {
-  width: 800px;
+  width: 100%;
+  min-width: 800px;
   border-collapse: collapse;
-  table-layout: auto;
+  table-layout: fixed;
 }
 .table-box {
   margin-top: 30px;
   padding: 10px;
   border-radius: 8px;
   background: #fff;
-  overflow-x: auto;
+  overflow: hidden;
   width: 100%;
+  max-height: 450px;
   box-sizing: border-box;
-  display: inline-block;
+  display: flex;
+  flex-direction: column;
 }
 
 th,
@@ -471,14 +680,41 @@ td {
   padding: 8px 12px;
   text-align: center;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-td {
-  white-space: normal;
-  word-break: break-word;
+
+/* Fixed column widths */
+.col-waktu {
+  width: 100px;
 }
+.col-suhu {
+  width: 90px;
+}
+.col-hum {
+  width: 120px;
+}
+.col-angin {
+  width: 150px;
+}
+.col-rain {
+  width: 130px;
+}
+.col-lux {
+  width: 160px;
+  min-width: 160px;
+  max-width: 160px;
+}
+
 thead {
   background: #f3f8ff;
   color: #0a2e5c;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+thead th {
+  background: #f3f8ff;
 }
 
 /* Actions */

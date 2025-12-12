@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Debug MQTT - Monitoring Cuaca</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+      }
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+      .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: red;
+      }
+      .dot.connected {
+        background: green;
+      }
+      .log {
+        background: #f8f8f8;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 15px;
+        height: 400px;
+        overflow-y: auto;
+        font-family: monospace;
+        font-size: 12px;
+        white-space: pre-line;
+      }
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+      }
+      .data-table th,
+      .data-table td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: center;
+      }
+      .data-table th {
+        background-color: #f2f2f2;
+      }
+      .btn {
+        background: #007bff;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        margin: 5px;
+      }
+      .btn:hover {
+        background: #0056b3;
+      }
+      .test-messages {
+        background: #e7f3ff;
+        border: 1px solid #b3d7ff;
+        border-radius: 4px;
+        padding: 15px;
+        margin: 20px 0;
+      }
+      .esp32-topics {
+        background: #fff3cd;
+        border: 1px solid #ffeaa7;
+        border-radius: 4px;
+        padding: 15px;
+        margin: 20px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🔧 Debug MQTT - Monitoring Cuaca ESP32</h1>
+
+    <div class="container">
+      <h2>Status Koneksi</h2>
+      <div class="status">
+        <span class="dot" id="statusDot"></span>
+        <span id="statusText">Connecting...</span>
+      </div>
+
+      <button class="btn" onclick="clearLog()">Clear Log</button>
+      <button class="btn" onclick="testPublish()">Test Publish Data</button>
+      <button class="btn" onclick="reconnect()">Reconnect</button>
+
+      <h3>Live Debug Log</h3>
+      <div class="log" id="logContainer"></div>
+    </div>
+
+    <div class="container">
+      <h2>Data Terakhir</h2>
+      <table class="data-table">
+        <tr>
+          <th>Topic</th>
+          <th>Value</th>
+          <th>Time</th>
+          <th>Count</th>
+        </tr>
+        <tr>
+          <td>esp32/suhu</td>
+          <td id="suhu">--</td>
+          <td id="suhu-time">--</td>
+          <td id="suhu-count">0</td>
+        </tr>
+        <tr>
+          <td>esp32/kelembapan</td>
+          <td id="kelembapan">--</td>
+          <td id="kelembapan-time">--</td>
+          <td id="kelembapan-count">0</td>
+        </tr>
+        <tr>
+          <td>esp32/curah_hujan</td>
+          <td id="curah_hujan">--</td>
+          <td id="curah_hujan-time">--</td>
+          <td id="curah_hujan-count">0</td>
+        </tr>
+        <tr>
+          <td>esp32/kecepatan_angin</td>
+          <td id="kecepatan_angin">--</td>
+          <td id="kecepatan_angin-time">--</td>
+          <td id="kecepatan_angin-count">0</td>
+        </tr>
+        <tr>
+          <td>esp32/cuaca</td>
+          <td id="cuaca">--</td>
+          <td id="cuaca-time">--</td>
+          <td id="cuaca-count">0</td>
+        </tr>
+        <tr>
+          <td>esp32/lux</td>
+          <td id="lux">--</td>
+          <td id="lux-time">--</td>
+          <td id="lux-count">0</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="test-messages">
+      <h3>🧪 Test Messages</h3>
+      <p>
+        Klik tombol "Test Publish Data" untuk mengirim data test dan memastikan dashboard dapat
+        menerima data dengan benar.
+      </p>
+    </div>
+
+    <div class="esp32-topics">
+      <h3>📡 Expected ESP32 Topics</h3>
+      <p>Pastikan ESP32 mengirim data ke topic berikut:</p>
+      <ul>
+        <li><strong>esp32/suhu</strong> - Format: angka (contoh: 25.5)</li>
+        <li><strong>esp32/kelembapan</strong> - Format: angka (contoh: 60)</li>
+        <li><strong>esp32/curah_hujan</strong> - Format: angka (contoh: 0.5)</li>
+        <li><strong>esp32/kecepatan_angin</strong> - Format: angka (contoh: 2.3)</li>
+        <li><strong>esp32/cuaca</strong> - Format: text (contoh: "Cerah")</li>
+        <li><strong>esp32/lux</strong> - Format: angka (contoh: 1200)</li>
+      </ul>
+    </div>
+
+    <script src="https://unpkg.com/mqtt@5.3.4/dist/mqtt.min.js"></script>
+    <script>
+      let client = null
+      let messageCount = {}
+
+      const logContainer = document.getElementById('logContainer')
+      const statusDot = document.getElementById('statusDot')
+      const statusText = document.getElementById('statusText')
+
+      function addLog(message) {
+        const timestamp = new Date().toLocaleTimeString()
+        logContainer.textContent += `[${timestamp}] ${message}\n`
+        logContainer.scrollTop = logContainer.scrollHeight
+      }
+
+      function updateData(topic, value) {
+        const cleanTopic = topic.replace('esp32/', '')
+        const element = document.getElementById(cleanTopic)
+        const timeElement = document.getElementById(cleanTopic + '-time')
+        const countElement = document.getElementById(cleanTopic + '-count')
+
+        if (element) {
+          element.textContent = value
+          timeElement.textContent = new Date().toLocaleTimeString()
+          messageCount[topic] = (messageCount[topic] || 0) + 1
+          countElement.textContent = messageCount[topic]
+        }
+      }
+
+      function connectMQTT() {
+        addLog('🔄 Connecting to HiveMQ Cloud...')
+
+        client = mqtt.connect(
+          'wss://751cee3a0dcb4364bbb1e4dbe4a87ca5.s1.eu.hivemq.cloud:8883/mqtt',
+          {
+            username: 'langgamdewa',
+            password: 'Rizkypratama512',
+            reconnectPeriod: 5000,
+            connectTimeout: 30000,
+            keepalive: 60,
+            clean: true,
+            clientId: 'debug_client_' + Math.random().toString(16).substr(2, 8),
+          },
+        )
+
+        client.on('connect', () => {
+          statusDot.className = 'dot connected'
+          statusText.textContent = 'Connected to HiveMQ Cloud'
+          addLog('✅ Connected to HiveMQ Cloud')
+          addLog('🔗 Broker: 751cee3a0dcb4364bbb1e4dbe4a87ca5.s1.eu.hivemq.cloud:8883')
+
+          // Subscribe to all ESP32 topics
+          const topics = [
+            'esp32/suhu',
+            'esp32/kelembapan',
+            'esp32/curah_hujan',
+            'esp32/kecepatan_angin',
+            'esp32/cuaca',
+            'esp32/lux',
+            'esp32/#', // wildcard for any esp32 topic
+          ]
+
+          topics.forEach((topic) => {
+            client.subscribe(topic, (err) => {
+              if (err) {
+                addLog(`❌ Failed to subscribe to ${topic}: ${err.message}`)
+              } else {
+                addLog(`✅ Subscribed to ${topic}`)
+              }
+            })
+          })
+
+          addLog('⏳ Waiting for data from ESP32...')
+        })
+
+        client.on('message', (topic, message) => {
+          const value = message.toString()
+          addLog(`📩 Received: ${topic} = ${value}`)
+          updateData(topic, value)
+        })
+
+        client.on('error', (err) => {
+          statusDot.className = 'dot'
+          statusText.textContent = 'Connection Error'
+          addLog(`❌ MQTT Error: ${err.message}`)
+        })
+
+        client.on('disconnect', () => {
+          statusDot.className = 'dot'
+          statusText.textContent = 'Disconnected'
+          addLog('❌ Disconnected from MQTT')
+        })
+
+        client.on('reconnect', () => {
+          addLog('🔄 Reconnecting...')
+        })
+
+        client.on('offline', () => {
+          statusDot.className = 'dot'
+          statusText.textContent = 'Offline'
+          addLog('📴 MQTT client went offline')
+        })
+      }
+
+      function testPublish() {
+        if (!client || !client.connected) {
+          addLog('❌ Not connected to MQTT. Cannot send test data.')
+          return
+        }
+
+        addLog('🧪 Publishing test data...')
+
+        // Send test data
+        const testData = {
+          'esp32/suhu': (20 + Math.random() * 15).toFixed(1),
+          'esp32/kelembapan': (40 + Math.random() * 40).toFixed(1),
+          'esp32/curah_hujan': (Math.random() * 5).toFixed(2),
+          'esp32/kecepatan_angin': (Math.random() * 10).toFixed(1),
+          'esp32/cuaca': ['Cerah', 'Berawan', 'Hujan', 'Mendung'][Math.floor(Math.random() * 4)],
+          'esp32/lux': Math.floor(Math.random() * 2000),
+        }
+
+        Object.entries(testData).forEach(([topic, value]) => {
+          client.publish(topic, value.toString(), (err) => {
+            if (err) {
+              addLog(`❌ Failed to publish ${topic}: ${err.message}`)
+            } else {
+              addLog(`✅ Published ${topic}: ${value}`)
+            }
+          })
+        })
+      }
+
+      function clearLog() {
+        logContainer.textContent = ''
+        addLog('🧹 Log cleared')
+      }
+
+      function reconnect() {
+        if (client) {
+          client.end()
+        }
+        setTimeout(connectMQTT, 1000)
+      }
+
+      // Initialize
+      connectMQTT()
+
+      // Check connection every 10 seconds
+      setInterval(() => {
+        if (client && client.connected) {
+          addLog('💓 Connection heartbeat - OK')
+        } else {
+          addLog('💔 Connection heartbeat - FAILED')
+        }
+      }, 10000)
+    </script>
+  </body>
+</html>
