@@ -207,7 +207,7 @@
         addLog('🔄 Connecting to HiveMQ Cloud...')
 
         client = mqtt.connect(
-          'wss://751cee3a0dcb4364bbb1e4dbe4a87ca5.s1.eu.hivemq.cloud:8883/mqtt',
+          'wss://751cee3a0dcb4364bbb1e4dbe4a87ca5.s1.eu.hivemq.cloud:8884/mqtt',
           {
             username: 'langgamdewa',
             password: 'Rizkypratama512',
@@ -215,7 +215,8 @@
             connectTimeout: 30000,
             keepalive: 60,
             clean: true,
-            clientId: 'debug_client_' + Math.random().toString(16).substr(2, 8),
+            clientId: 'DebugClient-' + String(Math.random() * 10000).padStart(4, '0'),
+            protocolVersion: 4,
           },
         )
 
@@ -223,7 +224,7 @@
           statusDot.className = 'dot connected'
           statusText.textContent = 'Connected to HiveMQ Cloud'
           addLog('✅ Connected to HiveMQ Cloud')
-          addLog('🔗 Broker: 751cee3a0dcb4364bbb1e4dbe4a87ca5.s1.eu.hivemq.cloud:8883')
+          addLog('🔗 Broker: 751cee3a0dcb4364bbb1e4dbe4a87ca5.s1.eu.hivemq.cloud:8884 (WebSocket)')
 
           // Subscribe to all ESP32 topics
           const topics = [

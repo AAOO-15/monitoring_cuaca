@@ -144,7 +144,7 @@ onMounted(async () => {
   await nextTick()
 
   const client = mqtt.connect(
-    'wss://751cee3a0dcb4364bbb1e4dbe4a87ca5.s1.eu.hivemq.cloud:8883/mqtt',
+    'wss://751cee3a0dcb4364bbb1e4dbe4a87ca5.s1.eu.hivemq.cloud:8884/mqtt',
     {
       username: 'langgamdewa',
       password: 'Rizkypratama512',
@@ -152,7 +152,8 @@ onMounted(async () => {
       connectTimeout: 30000,
       keepalive: 60,
       clean: true,
-      clientId: 'web_dashboard_' + Math.random().toString(16).substr(2, 8),
+      clientId: 'WebDashboard-' + String(Math.random() * 10000).padStart(4, '0'),
+      protocolVersion: 4,
     },
   )
 
@@ -169,8 +170,10 @@ onMounted(async () => {
     mqttConnected.value = true
     console.log('✅ Connected to HiveMQ Cloud at', new Date().toLocaleTimeString())
     console.log('🌐 Environment:', import.meta.env.MODE)
-    console.log('🔗 Broker:', 'wss://751cee3a0dcb4364bbb1e4dbe4a87ca5.s1.eu.hivemq.cloud:8883')
-
+    console.log(
+      '🔗 Broker:',
+      'wss://751cee3a0dcb4364bbb1e4dbe4a87ca5.s1.eu.hivemq.cloud:8884 (WebSocket)',
+    )
     // Subscribe ke semua topic secara individual (backup jika wildcard gagal)
     const topics = [
       'esp32/suhu',
