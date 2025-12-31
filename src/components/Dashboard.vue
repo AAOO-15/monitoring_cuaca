@@ -14,6 +14,7 @@
         <div class="current-weather" :title="'Cuaca saat ini'">{{ cuaca }}</div>
       </header>
 
+
       <section class="stats" aria-label="Ringkasan Data">
         <div class="stat-card">
           <div class="stat-label">Suhu</div>
@@ -113,6 +114,7 @@ const intensitasCahaya = ref('--')
 const mqttConnected = ref(false)
 const lastMessageTime = ref('--')
 const messageCount = ref(0)
+const receivedTopics = ref<Set<string>>(new Set())
 
 // Canvas refs
 const rainCanvas = ref<HTMLCanvasElement | null>(null)
@@ -182,17 +184,24 @@ onMounted(async () => {
       'esp32/kecepatan_angin',
       'esp32/cuaca',
       'esp32/lux',
-      'esp32/#',
+      'esp32/intensitas_cahaya',
+      'esp32/#', // Wildcard untuk tangkap semua
     ]
 
     let subscribeCount = 0
+    const totalTopics = topics.length
+
     topics.forEach((topic) => {
       client.subscribe(topic, (err) => {
         if (err) {
-          console.error(`❌ Subscribe error for ${topic}:`, err)
+          console.error(`%c❌ Subscribe error for ${topic}`, 'color: red;', err)
         } else {
           subscribeCount++
-          console.log(`✅ Subscribed to ${topic} (${subscribeCount}/${topics.length})`)
+          console.log(
+            `%c✅ Subscribed to ${topic}`,
+            'color: lime;',
+            `(${subscribeCount}/${totalTopics})`,
+          )
         }
       })
     })
@@ -226,7 +235,10 @@ onMounted(async () => {
 
   client.on('message', (topic, message) => {
     // FIRST LOG - Pastikan ini muncul
-    console.log('🎉 === MESSAGE RECEIVED ===')
+    console.log(
+      '%c 🎉 === MESSAGE RECEIVED ===',
+      'color: lime; font-weight: bold; font-size: 14px;',
+    )
 
     if (!topic) {
       console.warn('⚠️ Received message without topic')
@@ -236,17 +248,21 @@ onMounted(async () => {
     const val = message.toString()
     const now = new Date().toLocaleTimeString()
 
+    // Track semua topic yang masuk
+    receivedTopics.value.add(topic)
+
     // Update status
     lastMessageTime.value = now
     messageCount.value++
 
-    // LOG SEMUA pesan yang masuk - DETAILED
-    console.log('📩 MQTT Message Details:')
-    console.log('   Topic:', topic)
-    console.log('   Value:', val)
+    // LOG SEMUA pesan yang masuk - DETAILED dengan warna
+    console.log('%c📩 MQTT Message Details:', 'color: cyan; font-weight: bold;')
+    console.log('   Topic: %c' + topic, 'color: yellow; font-weight: bold;')
+    console.log('   Value: %c' + val, 'color: lime;')
     console.log('   Time:', now)
     console.log('   Total Messages:', messageCount.value)
-    console.log('========================\n')
+    console.log('   Topics Received So Far:', Array.from(receivedTopics.value).join(', '))
+    console.log('%c========================', 'color: cyan;')
 
     const num = parseFloat(val)
 
@@ -345,11 +361,22 @@ onMounted(async () => {
       'esp32/cuaca',
       'esp32/lux',
       'esp32/intensitas_cahaya',
+      'esp32/#',
     ]
 
     if (!knownTopics.includes(topic)) {
-      console.warn('⚠️ Unknown topic:', topic, '| value:', val)
-      console.warn('💡 Did you mean one of these?', knownTopics)
+      console.warn(
+        '%c⚠️ Unknown topic:',
+        'color: orange; font-weight: bold;',
+        topic,
+        '| value:',
+        val,
+      )
+      console.warn('%c💡 Did you mean one of these?', 'color: lightblue;', knownTopics)
+      console.warn(
+        '%c📌 This is just a warning - check if ESP32 is using a different topic name',
+        'color: gray;',
+      )
     }
   })
 
