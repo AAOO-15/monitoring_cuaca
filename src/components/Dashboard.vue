@@ -56,7 +56,7 @@
           <canvas ref="humCanvas"></canvas>
         </div>
         <div class="chart-card">
-          <div class="chart-title">Intensitas Cahaya</div>
+          <div class="chart-title">LUX</div>
           <canvas ref="luxCanvas"></canvas>
         </div>
 
